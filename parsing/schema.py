@@ -1,9 +1,4 @@
-"""
-parsing/schema.py
------------------
-Defines the unified LogRecord dataclass that all pipeline stages read/write.
-Every field that is empty at parse time gets filled in by downstream modules.
-"""
+
 
 from dataclasses import dataclass, field
 from typing import Optional

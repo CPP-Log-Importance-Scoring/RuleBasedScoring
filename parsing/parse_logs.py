@@ -1,17 +1,4 @@
-"""
-parsing/parse_logs.py
----------------------
-Reads raw CX syslog lines and populates a LogRecord up to the
-template_id field (template_id is filled by template_extraction.py).
 
-Log format observed in logs.txt:
-  <PRI>Mon DD HH:MM:SS HOST SERVICE: message
-
-Examples:
-  <190>Mar 12 10:00:00 sw-access-02 SNMP: Authentication failure from 192.168.14.92
-  <189>Mar 12 10:00:02 sw-core-01 SECURITY: possible port scan detected from IP 192.168.3.42
-  <191>Mar 12 10:00:10 sw-access-02 PORT: port 1/0/28 changed state to down
-"""
 
 import re
 from pathlib import Path
