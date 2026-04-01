@@ -79,7 +79,7 @@ def _extract_event(service: str, message: str) -> tuple[str, str]:
     return service, "UNKNOWN"
 
 
-# ── Main parsing function ─────────────────────────────────────────────────────
+# Main parsing function 
 
 def parse_line(raw_line: str) -> LogRecord | None:
     """
@@ -126,12 +126,9 @@ def parse_file(log_path: str | Path) -> Iterator[LogRecord]:
             record = parse_line(raw_line)
             if record is not None:
                 yield record
-            # Uncomment to debug skipped lines:
-            # else:
-            #     print(f"[WARN] Skipped line {lineno}: {raw_line.rstrip()}")
+      
 
 
-# ── Quick smoke-test (run directly: python -m parsing.parse_logs) ─────────────
 if __name__ == "__main__":
     import sys
 

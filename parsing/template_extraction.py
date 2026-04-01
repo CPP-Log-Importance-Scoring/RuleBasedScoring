@@ -2,7 +2,7 @@ import re
 from parsing.schema import LogRecord
 
 
-# ── Volatile-token patterns (order matters — most specific first) ─────────────
+
 
 _NORMALISATION_RULES: list[tuple[re.Pattern, str]] = [
     # Router ID  e.g. "Router ID 192.168.46.47"
@@ -20,17 +20,12 @@ _NORMALISATION_RULES: list[tuple[re.Pattern, str]] = [
     # VLAN number  e.g. "VLAN 44"  "VLAN 1"
     (re.compile(r"\bVLAN\s+\d+\b"), "VLAN <VLAN_ID>"),
 
-    # Generic integer (catch remaining numbers that vary per event)
-    # Intentionally conservative — only bare numbers ≥2 digits
     (re.compile(r"\b\d{2,}\b"), "<NUM>"),
 ]
 
 
 def _normalise_message(message: str) -> str:
-    """
-    Replace volatile tokens in a log message with fixed placeholders,
-    producing a stable structural representation.
-    """
+  
     result = message
     for pattern, replacement in _NORMALISATION_RULES:
         result = pattern.sub(replacement, result)
@@ -38,16 +33,7 @@ def _normalise_message(message: str) -> str:
 
 
 def assign_template_id(record: LogRecord) -> LogRecord:
-    """
-    Compute and write template_id (and normalised_message) into a LogRecord.
-    Returns the same record (mutated in place) for easy chaining.
-
-    template_id is intentionally coarse: it groups all log lines that have
-    the same structural meaning, regardless of the specific IPs/ports involved.
-    This is exactly what the 60-second frequency window needs.
-    """
-    # Primary key: service + event_action  (already extracted by parse_logs.py)
-    # This covers ~95% of your log corpus cleanly.
+    
     template_id = f"{record.service}_{record.event_action}".upper()
 
     # Store the normalised message for debugging / template_extraction.py tests
@@ -66,7 +52,7 @@ def assign_template_ids_batch(records: list[LogRecord]) -> list[LogRecord]:
     return records
 
 
-# ── Template registry: human-readable descriptions ───────────────────────────
+#  Template registry: human-readable descriptions 
 # Used by tests and reporting to describe what each template means.
 
 TEMPLATE_DESCRIPTIONS: dict[str, str] = {
@@ -98,7 +84,6 @@ def describe_template(template_id: str) -> str:
     return TEMPLATE_DESCRIPTIONS.get(template_id, f"Unknown template: {template_id}")
 
 
-# ── Smoke-test (run directly: python -m parsing.template_extraction) ──────────
 if __name__ == "__main__":
     import sys
     from parsing.parse_logs import parse_file

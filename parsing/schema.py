@@ -16,7 +16,7 @@ class LogRecord:
     message:          str            = ""   # full raw message text
     raw_line:         str            = ""   # original unparsed syslog line
 
-    #  Stage 1b: Populated by template_extraction.py 
+    #  Stage 1: Populated by template_extraction.py 
     template_id:      str            = ""   # e.g. "OSPF_NEIGHBOR_DOWN"
 
     #  Stage 2: Populated by features/ modules 
@@ -28,7 +28,7 @@ class LogRecord:
     #  Stage 3: Populated by scoring/event_weight.py 
     event_weight:     float          = 0.0  # w1·sev + w2·evt + w3·anom
 
-    # ── Stage 4: Populated by correlation/correlation_engine.py ──────────────
+    #  Stage 4: Populated by correlation/correlation_engine.py 
     correlation_id:   Optional[str]  = None  # UUID shared by a correlated cluster
     correlation_score: float         = 0.0   # proportional to cluster size
 

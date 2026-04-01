@@ -69,22 +69,10 @@ def _parse_timestamp(ts_str: str) -> float:
         return time.time()
 
 
-# ---------------------------------------------------------------------------
+
 # FrequencyCounter — the sliding window state
-# ---------------------------------------------------------------------------
+
 class FrequencyCounter:
-    """
-    Maintains a per-template_id sliding window of timestamps.
-
-    One instance should be shared across the entire log processing
-    session so the window accumulates state correctly.
-
-    Usage:
-        counter = FrequencyCounter(window_seconds=60)
-        for record in parse_file("data/logs.txt"):
-            ...
-            counter.update(record)   # sets record.frequency in place
-    """
 
     def __init__(self, window_seconds: int = 60):
         """
@@ -97,20 +85,6 @@ class FrequencyCounter:
         self._windows: dict[str, deque[float]] = defaultdict(deque)
 
     def update(self, record: LogRecord) -> int:
-        """
-        Update the sliding window for this record's template_id and
-        write the current window count to record.frequency.
-
-        Reads:
-            record.template_id   str   set by template_extraction.py
-            record.timestamp     str   e.g. "Mar 12 10:00:00"
-
-        Writes:
-            record.frequency     int   count of same template_id in window
-
-        Returns:
-            The frequency count (same value written to record.frequency).
-        """
         tid = record.template_id
         if not tid:
             logger.warning(
@@ -129,7 +103,7 @@ class FrequencyCounter:
         while window and window[0] < cutoff:
             window.popleft()
 
-        # Count before adding — "how many *other* records share this template_id"
+  
         count = len(window)
         window.append(ts)
 
@@ -148,12 +122,6 @@ class FrequencyCounter:
         """Return current window sizes per template_id (for debugging)."""
         return {tid: len(dq) for tid, dq in self._windows.items()}
 
-
-# ---------------------------------------------------------------------------
-# Module-level default instance
-# Used by compute_frequency() for simple single-pass pipelines.
-# For multi-session or test isolation, create your own FrequencyCounter.
-# ---------------------------------------------------------------------------
 _default_counter: FrequencyCounter | None = None
 
 
@@ -175,35 +143,18 @@ def compute_frequency(
     counter: FrequencyCounter | None = None,
     window_seconds: int = 60,
 ) -> int:
-    """
-    Compute frequency for a single record using a FrequencyCounter.
-
-    Args:
-        record:         LogRecord with template_id and timestamp set.
-        counter:        FrequencyCounter to use.  If None, uses the
-                        module-level default (suitable for single pipelines).
-        window_seconds: Window size, used only if creating a new counter.
-
-    Returns:
-        The frequency count (also written to record.frequency).
-    """
+ 
     if counter is None:
         counter = get_default_counter(window_seconds)
     return counter.update(record)
 
 
-# ---------------------------------------------------------------------------
-# Self-test  —  python -m features.frequency
-# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     import sys
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
     counter = FrequencyCounter(window_seconds=60)
-
-    # Simulate 5 identical SNMP AUTH_FAILURE events at the same timestamp
-    # (same template_id = "SNMP_AUTH_FAILURE")
-    # Expected frequencies: 0, 1, 2, 3, 4
     print("=== Burst detection: 5 identical events ===")
     for i in range(5):
         r = LogRecord(
