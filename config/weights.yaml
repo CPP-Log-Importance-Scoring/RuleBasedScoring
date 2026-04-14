@@ -18,6 +18,7 @@ gamma: 0.15 # correlation cluster boost
 threshold_ignore: 0.0
 threshold_low: 0.5
 threshold_medium: 1.0
+threshold_high: 1.6
 threshold_critical: 2.0
 
 # --- Frequency sliding window (seconds) ---

@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 class CorrelationEngine:
 
-
     def __init__(self, window_seconds: int = WINDOW_SECONDS):
         self.window_seconds = window_seconds
 
@@ -27,8 +26,6 @@ class CorrelationEngine:
 
         # cluster_key → sequential counter (for correlation_id generation)
         self._seq_counters: dict[str, int] = defaultdict(int)
-
-  
 
     def process_record(self, record: LogRecord) -> LogRecord:
         """
@@ -138,8 +135,6 @@ class CorrelationEngine:
             })
         return summary
 
- 
-
     def _get_cluster_key(self, record: LogRecord) -> str:
         """
         Derive the cluster key for a record.
@@ -173,21 +168,46 @@ class CorrelationEngine:
             return 0
 
 
-
+# ---------------------------------------------------------------------------
+# Module-level engine for streaming use (process_record convenience wrapper)
+# ---------------------------------------------------------------------------
 
 _default_engine = CorrelationEngine()
 
 
+# ---------------------------------------------------------------------------
+# FIX: correlate_batch now returns (records, cluster_summary) as a tuple
+#
+# BEFORE (broken):
+#   engine = CorrelationEngine(...)
+#   return engine.correlate_batch(records)       ← engine discarded here
+#                                                  get_cluster_summary() forever lost
+#
+# AFTER (fixed):
+#   engine = CorrelationEngine(...)
+#   engine.correlate_batch(records)
+#   return records, engine.get_cluster_summary() ← summary captured before engine dies
+#
+# Callers that don't need the summary can ignore it:
+#   records, _ = correlate_batch(records)
+# main.py uses CorrelationEngine directly instead, which is the cleaner pattern.
+# ---------------------------------------------------------------------------
+
 def correlate_batch(
     records: list[LogRecord],
     window_seconds: int = WINDOW_SECONDS,
-) -> list[LogRecord]:
+) -> tuple[list[LogRecord], list[dict]]:
     """
     Convenience wrapper — creates a fresh engine and runs a two-pass batch.
     Safe to call multiple times; each call uses a clean engine.
+
+    Returns:
+        (records, cluster_summary) — records mutated in-place with correlation
+        fields set; cluster_summary is a list of dicts from get_cluster_summary().
     """
     engine = CorrelationEngine(window_seconds=window_seconds)
-    return engine.correlate_batch(records)
+    engine.correlate_batch(records)
+    return records, engine.get_cluster_summary()
 
 
 def process_record(record: LogRecord) -> LogRecord:
@@ -198,9 +218,9 @@ def process_record(record: LogRecord) -> LogRecord:
     return _default_engine.process_record(record)
 
 
-# ------------------------------------------------------------------
-# Self-test
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Self-test  —  python -m correlation.correlation_engine
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import sys
@@ -253,7 +273,7 @@ if __name__ == "__main__":
     assert r_a.correlation_id != r_b.correlation_id, "Different hosts → different clusters"
     assert r_a.correlation_score == round(math.log2(2), 4)
     assert r_b.correlation_score == round(math.log2(2), 4)
-    print(f"  sw-core-01 → {r_a.correlation_id}  score={r_a.correlation_score}")
+    print(f"  sw-core-01   → {r_a.correlation_id}  score={r_a.correlation_score}")
     print(f"  sw-access-02 → {r_b.correlation_id}  score={r_b.correlation_score}")
     print("PASS\n")
 
@@ -261,4 +281,16 @@ if __name__ == "__main__":
     from correlation.clustering_utils import compute_correlation_score
     assert compute_correlation_score(7) == 3.0
     assert compute_correlation_score(50) == 3.0
-    print("Score saturates at 3.0  PASS")
+    print("Score saturates at 3.0  PASS\n")
+
+    # FIX TEST: verify the convenience wrapper now returns a tuple
+    print("=== correlate_batch() returns (records, summary) tuple ===")
+    result = correlate_batch(records)
+    assert isinstance(result, tuple) and len(result) == 2, \
+        "correlate_batch must return (records, cluster_summary)"
+    returned_records, summary = result
+    assert len(summary) >= 1, "Summary should have at least one cluster"
+    assert "cluster_key" in summary[0]
+    assert "members" in summary[0]
+    print(f"  Returned {len(summary)} cluster(s) in summary")
+    print("PASS")
