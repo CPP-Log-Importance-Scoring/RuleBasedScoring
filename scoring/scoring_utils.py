@@ -27,7 +27,7 @@ ALL_LABELS = [
     LABEL_IGNORE,
     LABEL_LOW,
     LABEL_MEDIUM,
-    LABEL_HIGH,     # ✅ INCLUDED
+    LABEL_HIGH,     
     LABEL_CRITICAL
 ]
 

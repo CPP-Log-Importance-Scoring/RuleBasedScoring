@@ -218,10 +218,9 @@ def process_record(record: LogRecord) -> LogRecord:
     return _default_engine.process_record(record)
 
 
-# ---------------------------------------------------------------------------
-# Self-test  —  python -m correlation.correlation_engine
-# ---------------------------------------------------------------------------
 
+# Self-test  —  python -m correlation.correlation_engine
+# 
 if __name__ == "__main__":
     import sys
     import math

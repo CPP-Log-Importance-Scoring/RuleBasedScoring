@@ -72,8 +72,7 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
         compute_event_weight(r)
 
     # ── Step 7: Correlation ───────────────────────────────
-    # FIX 1: Use window from yaml, not the hardcoded 300s default.
-    # FIX 2: Keep engine instance so we can call get_cluster_summary() below.
+   
     engine = CorrelationEngine(window_seconds=corr_window)
     engine.correlate_batch(records)
 
