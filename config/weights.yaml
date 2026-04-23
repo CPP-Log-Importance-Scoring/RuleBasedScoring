@@ -28,4 +28,4 @@ frequency_window_seconds: 60
 anomaly_proximity_delta_seconds: 30
 
 #  Correlation grouping window (seconds)
-correlation_window_seconds: 30
+correlation_window_seconds: 1800
