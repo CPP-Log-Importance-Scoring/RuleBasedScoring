@@ -76,10 +76,10 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
 
     
     gaps = gap_report(top_n=10)
-    if gaps:
-        print("\n--- TEMPLATE GAPS ---")
-        for g in gaps:
-            print(f"{g['event_type']} | {g['event_action']} → {g['miss_count']}")
+ #   if gaps:
+ #       print("\n--- TEMPLATE GAPS ---")
+ #       for g in gaps:
+  #          print(f"{g['event_type']} | {g['event_action']} → {g['miss_count']}")
 
    
     records_sorted = sorted(
