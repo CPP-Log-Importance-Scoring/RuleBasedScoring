@@ -101,31 +101,19 @@ def compute_anomaly_score(
     record: LogRecord,
     index: AnomalyIndex,
 ) -> float:
-    """
-    Set record.anomaly_score based on proximity to known counter anomalies.
 
-    Reads:
-        record.timestamp    str   set by parse_logs.py
+    ts = _parse_timestamp(record.timestamp)
 
-    Writes:
-        record.anomaly_score  float  0.0 or 1.0
+    proximity_score = 1.0 if index.is_near_anomaly(ts) else 0.0
 
-    Args:
-        record: LogRecord with timestamp set.
-        index:  AnomalyIndex preloaded from counters.csv.
-
-    Returns:
-        0.0 or 1.0 (also written to record.anomaly_score).
-    """
-    ts    = _parse_timestamp(record.timestamp)
-    score = 1.0 if index.is_near_anomaly(ts) else 0.0
-    record.anomaly_score = score
+    record.anomaly_score = max(record.anomaly_score, proximity_score)
 
     logger.debug(
         "anomaly_score=%.1f  timestamp=%s  host=%s  service=%s",
-        score, record.timestamp, record.host, record.service,
+        record.anomaly_score, record.timestamp, record.host, record.service,
     )
-    return score
+
+    return record.anomaly_score
 
 
 def compute_anomaly_scores_batch(

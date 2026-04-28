@@ -33,14 +33,11 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
     records = list(parse_file(log_file))
     logger.info("Parsed %d records", len(records))
 
-   
     assign_template_ids_batch(records)
 
-    # IMPORTANT: fallback event_type
     for r in records:
         if r.event_type == "UNKNOWN":
             r.event_type = r.service
-
 
     compute_features_batch(records)
 
@@ -50,17 +47,18 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
     tracker = NoveltyTracker()
     compute_novelty_batch(records, tracker=tracker)
 
-    index = AnomalyIndex.empty()
+    index = AnomalyIndex.from_csv("data/counters.csv", delta_seconds=60)
     compute_anomaly_scores_batch(records, index)
 
-    
+
+# ✅ DEBUG HERE
+  
+
     for r in records:
         compute_event_weight(r)
 
-  
     engine = CorrelationEngine(window_seconds=corr_window)
     engine.correlate_batch(records)
-
 
     seen = set()
     dedup_records = []
@@ -71,17 +69,10 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
             seen.add(key)
             dedup_records.append(r)
 
-
     score_batch(dedup_records, config_path=config_path)
 
-    
     gaps = gap_report(top_n=10)
- #   if gaps:
- #       print("\n--- TEMPLATE GAPS ---")
- #       for g in gaps:
-  #          print(f"{g['event_type']} | {g['event_action']} → {g['miss_count']}")
 
-   
     records_sorted = sorted(
         dedup_records,
         key=lambda r: r.importance_score,
@@ -92,20 +83,16 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
     for r in records_sorted[:10]:
         print(format_record(r))
 
- 
     with open("output.txt", "w") as f:
         for r in records_sorted:
             f.write(format_record(r) + "\n")
 
     logger.info("Output saved to output.txt")
 
-
     clusters = engine.get_cluster_summary()
 
-
-
-    
     print_summary(records_sorted)
+   
 
 
 if __name__ == "__main__":

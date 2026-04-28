@@ -22,7 +22,7 @@ writes the ranked output to `output.txt`.
 6. Compute base features: severity, event-type score, heuristic anomaly, provisional frequency, and provisional novelty.
 7. Recompute frequency with `features.frequency.compute_frequency()`.
 8. Recompute novelty with `features.novelty.NoveltyTracker`.
-9. Run anomaly proximity with an empty `AnomalyIndex`, which currently sets counter-proximity anomaly scores to `0.0`.
+9. Run anomaly proximity using counter data from `data/counters.csv`, assigning anomaly scores based on temporal proximity to anomaly spikes.
 10. Compute event weight.
 11. Correlate records by event family, host, event type/action, and time bucket.
 12. Deduplicate records by `correlation_id`.
@@ -40,7 +40,7 @@ RuleBasedScoring/
     weights.yaml                  # Weights, thresholds, and time windows
   data/
     logs.txt                      # Input syslog-style log events
-    counters.csv                  # Counter anomaly data, supported but not loaded by main.py
+    counters.csv                  # Counter anomaly data (actively used)
   parsing/
     parse_logs.py                 # Syslog parser and semantic event extraction
     drain_parser.py               # Drain3 TemplateMiner wrapper
@@ -114,82 +114,34 @@ Example:
 <187>Mar 12 10:00:00 app-server-01 APP: Service restarted
 ```
 
-The parser extracts:
-
-- syslog priority
-- timestamp
-- host
-- service
-- message
-- semantic event type/action
-
-Malformed or blank lines are skipped.
-
-Syslog severity is derived from the lowest three bits of the priority:
-
-```text
-severity 0-2 -> CRITICAL
-severity 3   -> ERROR
-severity 4   -> WARN
-severity 5-7 -> INFO
-```
-
-## Semantic Event Extraction
-
-`parsing.parse_logs` maps service/message combinations into event categories.
-Supported services include:
-
-- `APP`
-- `FW`
-- `WEB`
-- `SYS`
-- `ROUTING`
-- `IDM`
-- `PORT`
-- legacy services such as `OSPF`, `SECURITY`, `SNMP`, `DHCP_SNOOP`, `VLAN`, `Manager`, and `syslog`
-
-Examples:
-
-```text
-APP: Database timeout        -> APP/Database timeout
-WEB: GET /.env ...           -> WEB/GET /.env
-IDM: privilege escalation... -> IDM/privilege escalation attempt
-SYS: periodic health check   -> SYS/periodic health check
-```
-
-## Drain3 Template Mining
-
-`parsing.drain_parser` wraps Drain3's `TemplateMiner` with:
-
-```text
-drain_sim_th = 0.4
-drain_depth  = 4
-```
-
-`template_extraction.py` passes each log message to Drain and writes:
-
-- `template_id`: `TEMPLATE_<cluster_id>`
-- `message`: normalized mined template text
-
-Drain templates are used for grouping/frequency support. They do not replace
-the semantic `event_action`, so scoring remains explainable.
-
 ## Feature Scoring
 
 Each `LogRecord` carries these feature fields:
 
-- `severity_score`: from log level (`CRITICAL`, `ERROR`, `WARN`, `INFO`)
-- `event_type_score`: substring match against the rule table in `feature_service.py`
-- `anomaly_score`: binary `0.0` or `1.0`
-- `frequency`: same-template count in the active sliding window
-- `novelty_score`: rarity/spike score from recent frequency history
-- `correlation_score`: normalized boost from cluster size
+- `severity_score`
+- `event_type_score`
+- `anomaly_score`
+- `frequency`
+- `novelty_score`
+- `correlation_score`
 
-Important current behavior: `feature_service.py` computes a heuristic anomaly
-score first, but `main.py` later calls `compute_anomaly_scores_batch()` with
-`AnomalyIndex.empty()`. That means the active run overwrites anomaly proximity
-to `0.0` for all records. To use `data/counters.csv`, change `main.py` to use
-`AnomalyIndex.from_csv("data/counters.csv")`.
+### Anomaly Scoring (Updated)
+
+The system incorporates anomaly signals from `data/counters.csv`.
+
+- High counter values indicate anomaly spikes.
+- Logs occurring within a configurable time window (default ±60 seconds)
+  of these timestamps are assigned:
+
+```text
+anomaly_score = 1.0
+```
+
+- This score is combined with heuristic anomaly detection using:
+
+```text
+record.anomaly_score = max(heuristic_score, proximity_score)
+```
 
 ## Scoring Formulas
 
@@ -211,9 +163,6 @@ w3: 0.2
 
 ### Importance Score
 
-`scoring.importance_score` uses event weight, event confidence, novelty,
-correlation, and rarity:
-
 ```text
 novelty_factor = 0.5 + 0.5 * novelty_score
 
@@ -232,17 +181,7 @@ importance_score = weighted_event
                  + rarity_term
 ```
 
-The main coefficients are loaded from `config/weights.yaml`:
-
-```yaml
-alpha: 0.60
-beta: 0.25
-gamma: 0.15
-```
-
 ## Labels
-
-Final scores are mapped to labels using these thresholds:
 
 ```text
 score < 0.5        -> ignore
@@ -252,86 +191,10 @@ score < 0.5        -> ignore
 score >= 2.0       -> critical
 ```
 
-Thresholds can be tuned in `config/weights.yaml`.
-
-## Correlation
-
-`CorrelationEngine` clusters records using:
-
-- event family
-- host
-- event type
-- event action
-- time bucket
-
-Known event families include `NETWORK_DOWN`, `NETWORK_UP`, `SECURITY`, `AUTH`,
-and `CONFIG`; unknown combinations fall back to their `event_type`.
-
-Cluster size is converted to a normalized `0.0` to `1.0` score:
-
-```text
-correlation_score = min(log2(cluster_size + 1) / 3.0, 1.0)
-```
-
-Each record receives a `correlation_id` like:
-
-```text
-corr-12345-001
-```
-
-`main.py` deduplicates by `correlation_id` before final scoring.
-
-## Output
-
-`output.txt` contains ranked records, highest score first:
-
-```text
-[MEDIUM  ] score=1.326  Mar 12 10:00:00  app-server-01  APP  APP/User login success  corr=corr-12345-001
-```
-
-The console also prints:
-
-- top 10 important logs
-- label distribution
-- noise suppression ratio
-- actionable count (`medium`, `high`, `critical`)
-- critical count
-
-The gap-report helper still exists in `feature_service.py`, but the print block
-in `main.py` is currently commented out.
-
-## Configuration
-
-`config/weights.yaml` controls:
-
-- `w1`, `w2`, `w3`: event-weight coefficients
-- `alpha`, `beta`, `gamma`: final importance-score coefficients
-- `threshold_low`, `threshold_medium`, `threshold_high`, `threshold_critical`: label cutoffs
-- `frequency_window_seconds`: configured frequency window
-- `anomaly_proximity_delta_seconds`: counter anomaly proximity window
-- `correlation_window_seconds`: correlation time bucket size
-
-Note: `main.py` currently calls `compute_frequency(r)` without passing the YAML
-window, so the default `60` second frequency window is used.
-
-## Useful Debug Commands
-
-Run from inside `RuleBasedScoring`:
-
-```powershell
-python -m parsing.parse_logs
-python -m features.frequency
-python -m features.novelty
-python -m features.anomaly_proximity
-python -m scoring.event_weight
-python -m scoring.scoring_utils
-```
-
 ## Notes
 
 - Most stages mutate `LogRecord` objects in place.
-- Drain template IDs are dynamic and can change if log order/input changes.
 - Frequency and novelty are order-sensitive.
 - Config loading in scoring modules is cached.
-- `data/counters.csv` is present, but the active main pipeline uses an empty anomaly index.
-- Cluster summaries are available through `engine.get_cluster_summary()`, but they are not currently written to disk.
+- `data/counters.csv` is actively used for anomaly detection via temporal proximity.
+- Effectiveness of anomaly scoring depends on alignment between log timestamps and anomaly spikes.
