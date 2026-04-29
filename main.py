@@ -123,20 +123,7 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
 
     print_summary(records_sorted)
 
-    # ✅ FIX 2: UTF-8 here also
-    clusters = engine.get_cluster_summary()
-    with open("correlation_clusters.txt", "w", encoding="utf-8") as f:
-        f.write("Correlation Report\n" + "=" * 50 + "\n")
-        for c in clusters:
-            f.write(f"\nCluster size={c['size']} score={c['score']}\n")
-            f.write(f"Key: {c['cluster_key']}\n")
-            for m in c["members"]:
-                f.write(
-                    f"{m['timestamp']}  {m['host']}  "
-                    f"{m['service']}  {m['correlation_id']}\n"
-                )
-
-    logger.info("Correlation clusters saved")
+    # Removed correlation_clusters.txt generation as requested
 
     gaps = gap_report(top_n=10)
     if gaps:
