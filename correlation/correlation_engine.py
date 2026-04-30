@@ -47,14 +47,12 @@ class CorrelationEngine:
     def __init__(self, window_seconds: int = WINDOW_SECONDS):
         self.window_seconds = window_seconds
         self._clusters: dict[str, list[LogRecord]] = defaultdict(list)
-        self._seq: dict[str, int] = defaultdict(int)
 
     # ─────────────────────────────────────────────────────────
     # Batch correlation
     # ─────────────────────────────────────────────────────────
     def correlate_batch(self, records: list[LogRecord]) -> list[LogRecord]:
         self._clusters.clear()
-        self._seq.clear()
 
         # First pass: group into clusters
         for record in records:
@@ -64,11 +62,10 @@ class CorrelationEngine:
         # Second pass: assign correlation_id + score
         for record in records:
             key = self._get_cluster_key(record)
-            self._seq[key] += 1
 
             cluster_size = len(self._clusters[key])
 
-            record.correlation_id = make_correlation_id(key, self._seq[key])
+            record.correlation_id = make_correlation_id(key)
             record.correlation_score = compute_correlation_score(cluster_size)
 
         logger.info(
@@ -157,4 +154,3 @@ class CorrelationEngine:
     # ─────────────────────────────────────────────────────────
     def reset(self):
         self._clusters.clear()
-        self._seq.clear()

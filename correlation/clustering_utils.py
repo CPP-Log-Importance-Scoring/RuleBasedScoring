@@ -1,4 +1,5 @@
 import math
+import hashlib
 from datetime import datetime
 
 # Default window (can be overridden from config)
@@ -38,6 +39,6 @@ def compute_correlation_score(cluster_size: int) -> float:
     return round(min(raw / 3.0, 1.0), 4)
 
 
-def make_correlation_id(cluster_key: str, seq: int) -> str:
-    key_hash = abs(hash(cluster_key)) % 100_000
-    return f"corr-{key_hash:05d}-{seq:03d}"
+def make_correlation_id(cluster_key: str) -> str:
+    key_hash = hashlib.sha1(cluster_key.encode("utf-8")).hexdigest()[:8]
+    return f"corr-{key_hash}"

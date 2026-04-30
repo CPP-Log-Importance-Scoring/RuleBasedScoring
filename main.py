@@ -13,6 +13,7 @@ from scoring.importance_score import score_batch
 from scoring.scoring_utils import print_summary, format_record
 
 from correlation.correlation_engine import CorrelationEngine
+from correlation.collapse_utils import IncidentGroup, build_incident_groups
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -38,6 +39,41 @@ def format_full_line(record) -> str:
         f"host={record.host} "
         f"{record.service}/{record.message}"
     )
+
+
+def format_incident(incident: IncidentGroup, index: int, evidence_limit: int = 3) -> str:
+    record = incident.representative
+    label = record.label.upper() if record.label else "UNSCORED"
+    correlation_summary = record.correlation_id or "none"
+    if len(incident.correlation_ids) > 1:
+        correlation_summary = (
+            f"{len(incident.correlation_ids)} correlation windows "
+            f"({incident.correlation_ids[0]} to {incident.correlation_ids[-1]})"
+        )
+
+    lines = [
+        f"Incident {index}",
+        f"Severity: {label}",
+        f"Score: {record.importance_score:.3f}",
+        f"Event: {record.event_type}/{record.event_action}",
+        f"Host: {record.host}",
+        f"Service: {record.service}",
+        f"Time range: {incident.first_seen} to {incident.last_seen}",
+        f"Grouped records: {len(incident.members)}",
+        f"Correlation: {correlation_summary}",
+        f"Why grouped: {incident.grouping_reason}",
+        "Representative log:",
+        f"  {record.timestamp} {record.host} {record.service}: {record.message}",
+        "Evidence:",
+    ]
+
+    for member in incident.members[:evidence_limit]:
+        lines.append(f"  - {member.timestamp} {member.service}: {member.message}")
+
+    if len(incident.members) > evidence_limit:
+        lines.append(f"  - ... {len(incident.members) - evidence_limit} more matching records")
+
+    return "\n".join(lines)
 
 
 def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yaml"):
@@ -77,18 +113,15 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
 
     # Sort by score
     records_sorted = sorted(records, key=lambda r: r.importance_score, reverse=True)
+    incidents_sorted = build_incident_groups(records, window_seconds=corr_window)
 
     # ✅ FIX 1: UTF-8 here
     with open("output.txt", "w", encoding="utf-8") as f:
 
-        for r in records_sorted:
-            f.write(format_full_line(r) + "\n")
-
-        f.write("\n")
-
-        f.write("Top Important Logs:\n")
-        for r in records_sorted[:10]:
-            f.write(format_record(r) + "\n")
+        f.write("Top Important Incidents\n")
+        f.write("These groups collapse repeated logs that look like the same operational incident.\n\n")
+        for idx, incident in enumerate(incidents_sorted[:10], start=1):
+            f.write(format_incident(incident, idx) + "\n\n")
 
         f.write("\n")
 
@@ -109,11 +142,16 @@ def main(log_file: str = "data/logs.txt", config_path: str = "config/weights.yam
         f.write(f"Actionable (med+high+crit): {actionable}\n")
         f.write(f"Critical: {dist['critical']}\n")
 
+        f.write("\nDetailed ranked logs\n")
+        for r in records_sorted:
+            f.write(format_full_line(r) + "\n")
+
     logger.info("Output saved to output.txt")
 
-    print("\nTop Important Logs:")
-    for r in records_sorted[:10]:
-        print(format_record(r))
+    print("\nTop Important Incidents:")
+    for idx, incident in enumerate(incidents_sorted[:10], start=1):
+        print(format_incident(incident, idx, evidence_limit=2))
+        print()
 
     print_summary(records_sorted)
 
